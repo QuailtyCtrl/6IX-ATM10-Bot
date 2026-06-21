@@ -4,10 +4,17 @@ const sftp = require('./sftp');
 const logParser = require('./logParser');
 const db = require('./database');
 const playerCache = require('./playerCache');
+const rcon = require('./rcon');
 const { formatDuration } = require('./playtime');
 const { joinMessage, leaveMessage, deathMessage, advancementMessage, statusAlert } = require('./embedBuilder');
 
 let discordClient = null;
+let serverStartedAt = null;
+
+// Tracks usernames whose UUID we've seen recently via the official
+// "UUID of player X is Y" log line, since that line and the "joined the
+// game" line are separate log entries that can arrive in either order.
+const pendingUuids = new Map(); // username -> uuid
 
 async function announce(content, type = 'bot') {
   if (!discordClient) return;
@@ -20,13 +27,33 @@ async function handleEvent(event) {
   console.log(`[serverMonitor] Event Detected: ${event.type} | User: ${event.username || 'unknown'}`);
 
   switch (event.type) {
+    case 'uuid': {
+      // Save the official UUID as soon as we see it, and cache it in case
+      // the "joined the game" line for this player arrives in the same or
+      // a later poll batch.
+      pendingUuids.set(event.username, event.uuid);
+      await db.upsertPlayer(event.uuid, event.username);
+      break;
+    }
+
     case 'join': {
-      // Ensure we track the player in cache so we know when they joined
-      const player = await db.getPlayerByUsername(event.username);
-      if (player) {
-        playerCache.addPlayer(player.uuid, event.username);
-        await db.startSession(player.uuid);
+      // Resolve UUID: prefer one seen via the official UUID line, else an
+      // existing DB record, else fall back to the deterministic offline-mode
+      // UUID (covers cases where the UUID line was missed or arrives late).
+      let uuid = pendingUuids.get(event.username);
+      if (!uuid) {
+        const existing = await db.getPlayerByUsername(event.username);
+        uuid = existing?.uuid || null;
       }
+      if (!uuid) {
+        uuid = logParser.generateOfflineUuid(event.username);
+      }
+
+      await db.upsertPlayer(uuid, event.username);
+      await db.startSession(uuid);
+      playerCache.addPlayer(uuid, event.username);
+      pendingUuids.delete(event.username);
+
       await announce(joinMessage(event.username), 'bot');
       break;
     }
@@ -39,7 +66,7 @@ async function handleEvent(event) {
       } else {
         const durationMs = await db.endSession(cached.uuid);
         playerCache.removePlayer(cached.uuid);
-        
+
         // Use formatDuration to turn the DB ms into readable text
         const timeText = formatDuration(durationMs || 0);
         await announce(leaveMessage(event.username, timeText), 'bot');
@@ -47,21 +74,29 @@ async function handleEvent(event) {
       break;
     }
 
-    case 'death': 
-      await announce(deathMessage(event.message), 'bot'); 
+    case 'death': {
+      const player = await db.getPlayerByUsername(event.username);
+      if (player) await db.incrementDeaths(player.uuid);
+      await announce(deathMessage(event.message), 'bot');
+      break;
+    }
+
+    case 'advancement': {
+      const player = await db.getPlayerByUsername(event.username);
+      if (player) await db.incrementAdvancements(player.uuid);
+      await announce(advancementMessage(event.username, event.advancement), 'bot');
+      break;
+    }
+
+    case 'started':
+      await announce(statusAlert('online'), 'admin');
+      serverStartedAt = Date.now();
       break;
 
-    case 'advancement': 
-      await announce(advancementMessage(event.username, event.advancement), 'bot'); 
-      break;
-
-    case 'started': 
-      await announce(statusAlert('online'), 'admin'); 
-      break;
-
-    case 'stopping': 
-      await announce(statusAlert('stop'), 'admin'); 
+    case 'stopping':
+      await announce(statusAlert('stop'), 'admin');
       playerCache.clear();
+      serverStartedAt = null;
       break;
   }
 }
@@ -80,6 +115,16 @@ async function pollOnce() {
   }
 }
 
+async function getServerStatus() {
+  const online = await rcon.isServerOnline();
+  return {
+    online,
+    playerCount: playerCache.getOnlineCount(),
+    players: playerCache.getOnlineList(),
+    uptimeMs: online && serverStartedAt ? Date.now() - serverStartedAt : null,
+  };
+}
+
 function init(client) { discordClient = client; }
 
-module.exports = { init, pollOnce };
+module.exports = { init, pollOnce, getServerStatus };
