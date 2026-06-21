@@ -1,4 +1,8 @@
 // modules/sftp.js
+// Connects to the server over SFTP, tails the Minecraft log file, 
+// and immediately disconnects. This stateless approach prevents 
+// strict Pterodactyl panels from dropping idle persistent connections.
+
 const SftpClient = require('ssh2-sftp-client');
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +26,11 @@ function saveState(state) {
 }
 
 let state = loadState();
+let pollCount = 0;
 
 async function readNewLines() {
-  console.log(`[sftp] Checking for new logs...`);
+  pollCount++;
+  console.log(`[sftp] Checking for new logs... (#${pollCount})`);
   
   const client = new SftpClient();
 
