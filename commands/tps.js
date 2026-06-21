@@ -1,6 +1,6 @@
 // commands/tps.js
-// Pulls TPS via RCON. NeoForge/Forge expose this through "/forge tps" (mean
-// TPS across dimensions); we parse the overall figure out of the response.
+// Pulls TPS via RCON. NeoForge/Forge expose this through "/neoforge tps"
+// Displays the Overworld TPS as the primary metric.
 // 30s cooldown is enforced per the README spec, shared across all users.
 
 const { SlashCommandBuilder } = require('discord.js');
@@ -11,10 +11,41 @@ const { tpsEmbed } = require('../modules/embedBuilder');
 let lastUsed = 0;
 
 function extractTps(rconResponse) {
-  // Typical line: "Overall : Mean tick time: 5.123 ms. Mean TPS: 19.456"
-  const match = rconResponse.match(/Mean TPS:\s*([\d.]+)/i);
+  // Format: "Overworld: 20.000 TPS (0.584 ms/tick)"
+  // Extract the first TPS value (Overworld)
+  const match = rconResponse.match(/Overworld:\s*([\d.]+)\s+TPS/);
   if (match) return parseFloat(match[1]);
+  
+  // Fallback: get any TPS value if Overworld not found
+  const fallback = rconResponse.match(/:\s*([\d.]+)\s+TPS/);
+  if (fallback) return parseFloat(fallback[1]);
+  
   return null;
+}
+
+function extractAllDimensions(rconResponse) {
+  // Extract all dimensions and their TPS, excluding mods we want to hide
+  const lines = rconResponse.split('\n');
+  const dimensions = [];
+  
+  const excludeList = ['compactmachines', 'irons_spellbooks'];
+  
+  for (const line of lines) {
+    const match = line.match(/^([^:]+):\s*([\d.]+)\s+TPS/);
+    if (match) {
+      const dimName = match[1].trim();
+      const tps = parseFloat(match[2]);
+      
+      // Skip excluded dimensions
+      if (excludeList.some(excluded => dimName.toLowerCase().includes(excluded))) {
+        continue;
+      }
+      
+      dimensions.push({ name: dimName, tps });
+    }
+  }
+  
+  return dimensions;
 }
 
 module.exports = {
@@ -49,6 +80,10 @@ module.exports = {
     }
 
     lastUsed = now;
-    await interaction.editReply({ embeds: [tpsEmbed(tps)] });
+    const dimensions = extractAllDimensions(result.response);
+    
+    await interaction.editReply({ 
+      embeds: [tpsEmbed(tps, dimensions)] 
+    });
   },
 };

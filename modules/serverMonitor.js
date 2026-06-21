@@ -75,6 +75,10 @@ async function handleEvent(event) {
     }
 
     case 'death': {
+      if (!event.username) {
+        console.warn('[serverMonitor] Death event with no username');
+        break;
+      }
       const player = await db.getPlayerByUsername(event.username);
       if (player) await db.incrementDeaths(player.uuid);
       await announce(deathMessage(event.message), 'bot');

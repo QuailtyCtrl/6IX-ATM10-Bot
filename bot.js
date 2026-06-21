@@ -97,8 +97,8 @@ client.once('clientReady', async () => {
   serverMonitor.init(client);
   chatBridge.registerDiscordListener(client);
 
-  scheduler.start('log-poll', config.polling.logIntervalMs, () => {
-    serverMonitor.pollOnce();
+  scheduler.start('log-poll', config.polling.logIntervalMs, async () => {
+    await serverMonitor.pollOnce();
   });
 });
 

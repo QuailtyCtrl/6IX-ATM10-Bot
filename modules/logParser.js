@@ -20,7 +20,7 @@ const PATTERNS = {
   ),
   // Includes plain "was killed" (no "by X") seen on servers with custom combat logging.
   death: new RegExp(
-    `^${TAG_PREFIX}(\\w{3,16}) (was slain by|was shot by|was killed by|was killed|was blown up by|fell|drowned|burned to death|tried to swim in lava|hit the ground too hard|starved to death|suffocated|was squashed|froze to death|withered away|was pricked to death|died|was impaled|was struck by lightning).*$`
+    `^${TAG_PREFIX}(\\w{3,16}) (was slain by|was shot by|was killed by|was killed|was blown up by|fell|drowned|burned to death|tried to swim in lava|hit the ground too hard|starved to death|suffocated)(.*)$`
   ),
   stopping: /^Stopping server$/,
   startDone: /Done \([\d.]+s\)!/,

@@ -33,8 +33,8 @@ function onlineListEmbed(players, isServerOnline) {
     .setDescription(description);
 }
 
-function tpsEmbed(tps) {
-  let status = 'Alright';
+function tpsEmbed(tps, dimensions = []) {
+  let status = 'Great';
   let color = COLORS.online;
 
   if (tps < 10) {
@@ -51,13 +51,25 @@ function tpsEmbed(tps) {
     color = COLORS.online;
   }
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(color)
-    .setTitle('\u26A0 TPS Alert')
+    .setTitle('📊 Server TPS')
     .addFields(
-      { name: 'Status', value: `**${status}**`, inline: true },
-      { name: 'Current TPS', value: `**${tps.toFixed(1)}**`, inline: true }
+      { name: 'Overworld TPS', value: `**${tps.toFixed(1)}**`, inline: true },
+      { name: 'Status', value: `**${status}**`, inline: true }
     );
+
+  // Add dimension details if available
+  if (dimensions.length > 0) {
+    const dimList = dimensions
+      .map(d => `• ${d.name}: **${d.tps.toFixed(1)}**`)
+      .join('\n');
+    embed.addFields(
+      { name: 'All Dimensions', value: dimList, inline: false }
+    );
+  }
+
+  return embed;
 }
 
 function playtimeEmbed(username, formattedDuration) {
