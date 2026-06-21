@@ -88,7 +88,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // --- Boot sequence ---
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`[bot] Logged in as ${client.user.tag}`);
 
   await db.init();

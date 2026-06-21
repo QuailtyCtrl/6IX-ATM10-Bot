@@ -32,14 +32,49 @@ let sftp = null;
 async function getClient() {
   if (sftp) return sftp;
   sftp = new SftpClient();
-  await sftp.connect({
-    host: config.sftp.host,
-    port: config.sftp.port,
-    username: config.sftp.username,
-    password: config.sftp.password,
-    readyTimeout: 10000,
+
+  // If the underlying connection drops after connect() resolved, null out
+  // the cache so the next poll reconnects instead of reusing a dead client.
+  sftp.on('end', () => {
+    console.warn('[sftp] Connection ended.');
+    sftp = null;
   });
-  return sftp;
+  sftp.on('close', () => {
+    console.warn('[sftp] Connection closed.');
+    sftp = null;
+  });
+  sftp.on('error', (err) => {
+    console.error('[sftp] Client error:', err && err.message, err && err.code, err);
+    sftp = null;
+  });
+
+  try {
+    await sftp.connect({
+      host: config.sftp.host,
+      port: config.sftp.port,
+      username: config.sftp.username,
+      password: config.sftp.password,
+      readyTimeout: 20000,
+      retries: 1,
+      // Verbose ssh2-level logging -- prints the raw handshake/auth steps so
+      // we can see exactly where/why the connection is dropping.
+      debug: (msg) => console.log('[ssh2-debug]', msg),
+    });
+  } catch (err) {
+    console.error('[sftp] connect() threw:', err && err.message, err && err.code, err);
+    sftp = null; // allow next poll to retry instead of reusing a dead client
+    throw err;
+  }
+
+  // Capture a local reference before returning -- if the connection drops
+  // immediately after connect() resolves (e.g. host enforces single-session
+  // limits), the 'end'/'close' handlers above may have already nulled the
+  // module-level `sftp` variable by the time we get here.
+  const connectedClient = sftp;
+  if (!connectedClient) {
+    throw new Error('SFTP connection dropped immediately after connecting (host may only allow one active session at a time).');
+  }
+  return connectedClient;
 }
 
 // Reads only the bytes appended since the last known offset.
@@ -47,7 +82,17 @@ async function getClient() {
 // (e.g. server restarted) -- reset offset to 0 and read from the start.
 async function readNewLines() {
   const client = await getClient();
-  const remoteStat = await client.stat(config.sftp.logPath);
+
+  let remoteStat;
+  try {
+    remoteStat = await client.stat(config.sftp.logPath);
+  } catch (err) {
+    // Connection died between getClient() and stat() -- reset cache so the
+    // next poll starts fresh instead of repeating the same dead-client error.
+    sftp = null;
+    throw err;
+  }
+
   const currentSize = remoteStat.size;
 
   if (currentSize < state.offset) {
@@ -59,23 +104,23 @@ async function readNewLines() {
     return []; // nothing new
   }
 
-  const length = currentSize - state.offset;
-  const buffer = Buffer.alloc(length);
+  let chunks;
+  try {
+    const stream = await client.createReadStream(config.sftp.logPath, {
+      start: state.offset,
+      end: currentSize - 1,
+    });
 
-  // ssh2-sftp-client exposes the underlying ssh2 client for raw read() calls
-  // via client.sftp (low-level). We use get() with a range-capable stream instead
-  // for broad version compatibility.
-  const stream = await client.createReadStream(config.sftp.logPath, {
-    start: state.offset,
-    end: currentSize - 1,
-  });
-
-  const chunks = [];
-  await new Promise((resolve, reject) => {
-    stream.on('data', (chunk) => chunks.push(chunk));
-    stream.on('end', resolve);
-    stream.on('error', reject);
-  });
+    chunks = [];
+    await new Promise((resolve, reject) => {
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+  } catch (err) {
+    sftp = null;
+    throw err;
+  }
 
   const text = Buffer.concat(chunks).toString('utf8');
 
