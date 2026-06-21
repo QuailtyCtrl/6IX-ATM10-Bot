@@ -15,6 +15,8 @@ Dotenv
 │  
 ├── bot.js  
 ├── package.json  
+├── README.md
+├── .gitignore    
 ├── .env  
 │  
 ├── modules/  
