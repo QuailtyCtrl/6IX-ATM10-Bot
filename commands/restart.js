@@ -14,10 +14,24 @@ module.exports = {
     .setDescription('Restarts the server. (Admin only)'),
 
   async execute(interaction) {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
     await interaction.editReply('\u2699\uFE0F Restarting Server\u2026.');
-    await rcon.execute('say Server is restarting...');
-    await rcon.execute('stop');
+    
+    const msgResult = await rcon.execute('say Server is restarting...');
+    const stopResult = await rcon.execute('stop');
+
+    if (!stopResult.success) {
+      await interaction.followUp({
+        content: `\u26A0 Failed to execute restart: ${stopResult.error}`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    await interaction.followUp({
+      content: '✅ Server restart sequence initiated.',
+      ephemeral: true,
+    });
   },
 };
