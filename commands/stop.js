@@ -8,10 +8,24 @@ module.exports = {
     .setDescription('Stops the server. (Admin only)'),
 
   async execute(interaction) {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
-    await interaction.editReply('\uD83D\uDED1Shutting Down Server\u2026.');
-    await rcon.execute('say Server is shutting down...');
-    await rcon.execute('stop');
+    await interaction.editReply('\uD83D\uDED1 Shutting Down Server\u2026.');
+    
+    const msgResult = await rcon.execute('say Server is shutting down...');
+    const stopResult = await rcon.execute('stop');
+
+    if (!stopResult.success) {
+      await interaction.followUp({
+        content: `\u26A0 Failed to execute stop: ${stopResult.error}`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    await interaction.followUp({
+      content: '✅ Server shutdown sequence initiated.',
+      ephemeral: true,
+    });
   },
 };
