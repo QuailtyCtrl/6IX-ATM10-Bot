@@ -1,6 +1,7 @@
 // commands/console.js
 const { SlashCommandBuilder } = require('discord.js');
 const rcon = require('../modules/rcon');
+const commandLogger = require('../modules/commandLogger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,14 +11,18 @@ module.exports = {
       opt.setName('command').setDescription('The command to execute (no leading /)').setRequired(true)
     ),
 
-  async execute(interaction) {
+  async execute(interaction, client) {
     await interaction.deferReply({ ephemeral: true });
 
     const cmd = interaction.options.getString('command');
+
+    // Log before executing so the record exists even if RCON fails
+    await commandLogger.logCommand(client, interaction.user.username, cmd);
+
     const result = await rcon.execute(cmd);
 
     if (!result.success) {
-      await interaction.editReply(`\u26A0 Failed to execute command: ${result.error}`);
+      await interaction.editReply(`⚠ Failed to execute command: ${result.error}`);
       return;
     }
 

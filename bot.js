@@ -48,6 +48,19 @@ async function registerCommands() {
 client.on('interactionCreate', async (interaction) => {
   console.log(`[debug] Received interaction: ${interaction.type} | ID: ${interaction.customId || interaction.commandName}`);
 
+  // 0. Handle Autocomplete
+  if (interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    if (command?.autocomplete) {
+      try {
+        await command.autocomplete(interaction);
+      } catch (err) {
+        console.error(`[bot] Autocomplete error in ${interaction.commandName}:`, err);
+      }
+    }
+    return;
+  }
+
   // 1. Handle Slash Commands
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);

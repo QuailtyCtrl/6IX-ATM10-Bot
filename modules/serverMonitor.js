@@ -5,7 +5,8 @@ const logParser = require('./logParser');
 const db = require('./database');
 const playerCache = require('./playerCache');
 const rcon = require('./rcon');
-const { formatDuration } = require('./playtime');
+const { formatDuration } = require('../commands/playtime');
+const chatBridge = require('./chatBridge');
 const { joinMessage, leaveMessage, deathMessage, advancementMessage, statusAlert } = require('./embedBuilder');
 
 let discordClient = null;
@@ -89,6 +90,12 @@ async function handleEvent(event) {
       const player = await db.getPlayerByUsername(event.username);
       if (player) await db.incrementAdvancements(player.uuid);
       await announce(advancementMessage(event.username, event.advancement), 'bot');
+      break;
+    }
+
+    case 'chat': {
+      if (!event.username || !event.message) break;
+      await chatBridge.sendFromMCToDiscord(discordClient, event.username, event.message);
       break;
     }
 
