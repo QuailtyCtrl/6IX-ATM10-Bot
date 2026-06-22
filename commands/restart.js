@@ -5,7 +5,7 @@
 // If that's not the case, swap the rcon.execute('stop') call below for
 // whatever your panel's restart trigger is.
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 
 module.exports = {
@@ -14,7 +14,7 @@ module.exports = {
     .setDescription('Restarts the server. (Admin only)'),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     await interaction.editReply('\u2699\uFE0F Restarting Server\u2026.');
     

@@ -1,5 +1,5 @@
 // commands/stop.js
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 
 module.exports = {
@@ -8,7 +8,7 @@ module.exports = {
     .setDescription('Stops the server. (Admin only)'),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     await interaction.editReply('\uD83D\uDED1 Shutting Down Server\u2026.');
     

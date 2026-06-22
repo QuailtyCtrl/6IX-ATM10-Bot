@@ -15,6 +15,7 @@ const PATTERNS = {
   leave: new RegExp(`^${TAG_PREFIX}(\\w{3,16}) left the game$`),
   uuid: /UUID of player (\w{3,16}) is ([0-9a-fA-F-]{36})/,
   chat: new RegExp(`^<${TAG_PREFIX}(\\w{3,16})> (.+)$`),
+  botLink: /^\[BOT_LINK\] (\w{3,16}) (\d{6})$/,
   advancement: new RegExp(
     `^${TAG_PREFIX}(\\w{3,16}) has (?:made|reached|completed) (?:the advancement|the goal|the challenge) \\[(.+)\\]$`
   ),
@@ -34,6 +35,7 @@ function parseLine(rawLine) {
   if ((m = message.match(PATTERNS.uuid))) return { type: 'uuid', username: m[1], uuid: m[2], raw: rawLine };
   if ((m = message.match(PATTERNS.join))) return { type: 'join', username: m[1], raw: rawLine };
   if ((m = message.match(PATTERNS.leave))) return { type: 'leave', username: m[1], raw: rawLine };
+  if ((m = message.match(PATTERNS.botLink))) return { type: 'botLink', username: m[1], code: m[2], raw: rawLine };
   if ((m = message.match(PATTERNS.advancement))) return { type: 'advancement', username: m[1], advancement: m[2], raw: rawLine };
   if ((m = message.match(PATTERNS.death))) return { type: 'death', username: m[1], message, raw: rawLine };
   if ((m = message.match(PATTERNS.chat))) return { type: 'chat', username: m[1], message: m[2], raw: rawLine };

@@ -1,5 +1,5 @@
 // commands/server.js
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const serverMonitor = require('../modules/serverMonitor');
 const rcon = require('../modules/rcon');
 const config = require('../modules/config');
@@ -22,7 +22,7 @@ module.exports = {
     .setDescription('Displays server details.'),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const status = await serverMonitor.getServerStatus();
     const ram = status.online ? await getRamUsage() : 'Offline';

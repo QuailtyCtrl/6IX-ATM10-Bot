@@ -3,7 +3,7 @@
 // Displays the Overworld TPS as the primary metric.
 // 30s cooldown is enforced per the README spec, shared across all users.
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 const config = require('../modules/config');
 const { tpsEmbed } = require('../modules/embedBuilder');
@@ -65,7 +65,7 @@ module.exports = {
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const result = await rcon.execute('neoforge tps');
     if (!result.success) {

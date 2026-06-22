@@ -22,24 +22,45 @@ const db = new sqlite3.Database(config.paths.database, (err) => {
 
 function init() {
   return new Promise((resolve, reject) => {
-    db.run(
-      `CREATE TABLE IF NOT EXISTS players (
-        uuid TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        first_join INTEGER,
-        last_seen INTEGER,
-        total_playtime INTEGER DEFAULT 0,
-        sessions INTEGER DEFAULT 0,
-        deaths INTEGER DEFAULT 0,
-        advancements INTEGER DEFAULT 0,
-        session_start INTEGER DEFAULT NULL
-      )`,
-      (err) => {
-        if (err) return reject(err);
-        console.log('[database] players table ready.');
-        resolve();
-      }
-    );
+    db.serialize(() => {
+      db.run(
+        `CREATE TABLE IF NOT EXISTS players (
+          uuid TEXT PRIMARY KEY,
+          username TEXT NOT NULL,
+          first_join INTEGER,
+          last_seen INTEGER,
+          total_playtime INTEGER DEFAULT 0,
+          sessions INTEGER DEFAULT 0,
+          deaths INTEGER DEFAULT 0,
+          advancements INTEGER DEFAULT 0,
+          session_start INTEGER DEFAULT NULL,
+          discord_id TEXT DEFAULT NULL
+        )`,
+        (err) => { if (err) return reject(err); }
+      );
+
+      // Migrate existing databases that predate the discord_id column
+      db.run(`ALTER TABLE players ADD COLUMN discord_id TEXT DEFAULT NULL`, (err) => {
+        // SQLITE_ERROR here just means the column already exists — safe to ignore
+        if (err && !err.message.includes('duplicate column')) {
+          console.warn('[database] Migration warning:', err.message);
+        }
+      });
+
+      // link_codes: temporary codes pending confirmation in-game
+      db.run(
+        `CREATE TABLE IF NOT EXISTS link_codes (
+          code TEXT PRIMARY KEY,
+          discord_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )`,
+        (err) => {
+          if (err) return reject(err);
+          console.log('[database] tables ready.');
+          resolve();
+        }
+      );
+    });
   });
 }
 
@@ -67,6 +88,15 @@ function getPlayerByUsername(username) {
   });
 }
 
+function getPlayerByDiscordId(discordId) {
+  return new Promise((resolve, reject) => {
+    db.get('SELECT * FROM players WHERE discord_id = ?', [discordId], (err, row) => {
+      if (err) return reject(err);
+      resolve(row || null);
+    });
+  });
+}
+
 function upsertPlayer(uuid, username) {
   const now = Date.now();
   return new Promise((resolve, reject) => {
@@ -77,6 +107,19 @@ function upsertPlayer(uuid, username) {
          username = excluded.username,
          last_seen = excluded.last_seen`,
       [uuid, username, now, now],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function linkDiscordToPlayer(uuid, discordId) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      'UPDATE players SET discord_id = ? WHERE uuid = ?',
+      [discordId, uuid],
       (err) => {
         if (err) return reject(err);
         resolve();
@@ -144,15 +187,53 @@ function getAllPlayers() {
   });
 }
 
+// --- Link code helpers ---
+
+function saveLinkCode(code, discordId) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT OR REPLACE INTO link_codes (code, discord_id, created_at) VALUES (?, ?, ?)`,
+      [code, discordId, Date.now()],
+      (err) => {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function consumeLinkCode(code) {
+  // Returns the discord_id if the code exists and is less than 10 minutes old, then deletes it
+  return new Promise((resolve, reject) => {
+    const expiry = Date.now() - 10 * 60 * 1000;
+    db.get(
+      'SELECT discord_id FROM link_codes WHERE code = ? AND created_at > ?',
+      [code, expiry],
+      (err, row) => {
+        if (err) return reject(err);
+        if (!row) return resolve(null);
+        db.run('DELETE FROM link_codes WHERE code = ?', [code], (err2) => {
+          if (err2) return reject(err2);
+          resolve(row.discord_id);
+        });
+      }
+    );
+  });
+}
+
 module.exports = {
   db,
   init,
   getPlayer,
   getPlayerByUsername,
+  getPlayerByDiscordId,
   upsertPlayer,
+  linkDiscordToPlayer,
   startSession,
   endSession,
   incrementDeaths,
   incrementAdvancements,
   getAllPlayers,
+  saveLinkCode,
+  consumeLinkCode,
 };

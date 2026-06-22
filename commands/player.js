@@ -39,6 +39,7 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const username = interaction.options.getString('username');
     const player = await db.getPlayerByUsername(username);
 
@@ -56,6 +57,7 @@ module.exports = {
       .setThumbnail(`https://mc-heads.net/avatar/${player.username}/64`)
       .addFields(
         { name: 'Status',         value: isOnline ? '🟢 Online' : '🔴 Offline',               inline: true  },
+        { name: 'Discord',        value: player.discord_id ? `<@${player.discord_id}>` : 'Not linked', inline: true },
         { name: 'Total Playtime', value: formatDuration(livePlaytime),                          inline: true  },
         { name: 'Sessions',       value: `${player.sessions ?? 0}`,                             inline: true  },
         { name: 'First Join',     value: formatDate(player.first_join),                         inline: true  },

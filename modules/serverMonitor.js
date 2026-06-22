@@ -5,12 +5,20 @@ const logParser = require('./logParser');
 const db = require('./database');
 const playerCache = require('./playerCache');
 const rcon = require('./rcon');
-const { formatDuration } = require('../commands/playtime');
+const { formatDuration } = require('./playtime');
 const chatBridge = require('./chatBridge');
 const { joinMessage, leaveMessage, deathMessage, advancementMessage, statusAlert } = require('./embedBuilder');
 
 let discordClient = null;
 let serverStartedAt = null;
+
+const pendingLinkInteractions = new Map(); // discordId -> interaction
+
+function registerLinkInteraction(discordId, interaction) {
+  pendingLinkInteractions.set(discordId, interaction);
+  // Auto-expire after 10 minutes to avoid memory leak
+  setTimeout(() => pendingLinkInteractions.delete(discordId), 10 * 60 * 1000);
+}
 
 // Tracks usernames whose UUID we've seen recently via the official
 // "UUID of player X is Y" log line, since that line and the "joined the
@@ -55,22 +63,26 @@ async function handleEvent(event) {
       playerCache.addPlayer(uuid, event.username);
       pendingUuids.delete(event.username);
 
-      await announce(joinMessage(event.username), 'bot');
+      const joined = await db.getPlayer(uuid);
+      const joinPing = joined?.discord_id ? ` • <@${joined.discord_id}>` : '';
+      await announce(`👋 **${event.username}** joined the server${joinPing}`, 'bot');
       break;
     }
 
     case 'leave': {
       const cached = playerCache.findByUsername(event.username);
       if (!cached) {
-        // If not in cache, we can't calculate exact time
-        await announce(leaveMessage(event.username, '0s'), 'bot');
+        const leftPlayer = await db.getPlayerByUsername(event.username);
+        const leavePing = leftPlayer?.discord_id ? ` • <@${leftPlayer.discord_id}>` : '';
+        await announce(`🔴 **${event.username}** left the server${leavePing}`, 'bot');
       } else {
         const durationMs = await db.endSession(cached.uuid);
         playerCache.removePlayer(cached.uuid);
 
-        // Use formatDuration to turn the DB ms into readable text
         const timeText = formatDuration(durationMs || 0);
-        await announce(leaveMessage(event.username, timeText), 'bot');
+        const left = await db.getPlayer(cached.uuid);
+        const leavePing = left?.discord_id ? ` • <@${left.discord_id}>` : '';
+        await announce(`🔴 **${event.username}** left the server${leavePing}\n⏱ Session: ${timeText}`, 'bot');
       }
       break;
     }
@@ -90,6 +102,37 @@ async function handleEvent(event) {
       const player = await db.getPlayerByUsername(event.username);
       if (player) await db.incrementAdvancements(player.uuid);
       await announce(advancementMessage(event.username, event.advancement), 'bot');
+      break;
+    }
+
+    case 'botLink': {
+      const player = await db.getPlayerByUsername(event.username);
+      const discordId = await db.consumeLinkCode(event.code);
+
+      if (!discordId) {
+        await rcon.execute(`tellraw ${event.username} {"text":"[Bot] Invalid or expired code. Run /link in Discord for a new one.","color":"red"}`);
+        break;
+      }
+
+      if (!player) {
+        await rcon.execute(`tellraw ${event.username} {"text":"[Bot] Could not find your player record. Try rejoining first.","color":"red"}`);
+        break;
+      }
+
+      await db.linkDiscordToPlayer(player.uuid, discordId);
+      await rcon.execute(`tellraw ${event.username} {"text":"[Bot] Successfully linked to your Discord account!","color":"green"}`);
+
+      const pendingInteraction = pendingLinkInteractions.get(discordId);
+      if (pendingInteraction) {
+        try {
+          await pendingInteraction.editReply(`✅ Your Discord account is now linked to **${event.username}**!`);
+        } catch (err) {
+          console.warn('[link] Could not resolve pending interaction:', err.message);
+        }
+        pendingLinkInteractions.delete(discordId);
+      }
+
+      console.log(`[link] ${event.username} linked to Discord ID ${discordId}`);
       break;
     }
 
@@ -138,4 +181,4 @@ async function getServerStatus() {
 
 function init(client) { discordClient = client; }
 
-module.exports = { init, pollOnce, getServerStatus };
+module.exports = { init, pollOnce, getServerStatus, registerLinkInteraction };

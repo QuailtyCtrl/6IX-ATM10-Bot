@@ -1,5 +1,5 @@
 // commands/console.js
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 const commandLogger = require('../modules/commandLogger');
 
@@ -12,7 +12,7 @@ module.exports = {
     ),
 
   async execute(interaction, client) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const cmd = interaction.options.getString('command');
 
