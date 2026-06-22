@@ -1,54 +1,64 @@
-// commands/ban.js
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 const db = require('../modules/database');
+
+const ITEMS_PER_PAGE = 25;
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Bans a player from the server. (Admin only)')
-    .addStringOption((opt) =>
-      opt
-        .setName('user')
-        .setDescription('Minecraft username')
-        .setRequired(true)
-        .setAutocomplete(true)
-    )
-    .addStringOption((opt) =>
-      opt.setName('reason').setDescription('Reason for the ban').setRequired(false)
-    ),
+    .setDescription('Bans a player from the server. (Admin only)'),
 
-  async autocomplete(interaction) {
-    const focusedValue = interaction.options.getFocused();
-    const players = await db.getAllPlayers();
-
-    // Filter players by username (case-insensitive)
-    const filtered = players
-      .filter((p) => p.username.toLowerCase().includes(focusedValue.toLowerCase()))
-      .slice(0, 25); // Discord limits to 25 options
-
-    const choices = filtered.map((p) => ({
-      name: p.username,
-      value: p.username, // Send username to execute handler
-    }));
-
-    await interaction.respond(choices);
+  async execute(interaction, client) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await this.showPlayerPagination(interaction, 0, 'ban');
   },
 
-  async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+  async showPlayerPagination(interaction, page, actionType) {
+    const players = await db.getAllPlayers();
+    const start = page * ITEMS_PER_PAGE;
+    const pagePlayers = players.slice(start, start + ITEMS_PER_PAGE);
 
-    const username = interaction.options.getString('user');
-    const reason = interaction.options.getString('reason');
-
-    const cmd = reason ? `ban ${username} ${reason}` : `ban ${username}`;
-    const result = await rcon.execute(cmd);
-
-    if (!result.success) {
-      await interaction.editReply(`\u26A0 Failed to ban **${username}**: ${result.error}`);
+    if (pagePlayers.length === 0) {
+      await interaction.editReply({ content: 'No players found in the database.' });
       return;
     }
 
-    await interaction.editReply(`\uD83D\uDD28 ${username} Has Been Banned.`);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`select_player_${actionType}`)
+      .setPlaceholder('Select a player to ban...')
+      .addOptions(pagePlayers.map(p => ({ label: p.username, value: p.username })));
+
+    const rowMenu = new ActionRowBuilder().addComponents(menu);
+
+    const rowButtons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`page_${page - 1}_${actionType}`)
+        .setLabel('Previous')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(page === 0),
+      new ButtonBuilder()
+        .setCustomId(`page_${page + 1}_${actionType}`)
+        .setLabel('Next')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(start + ITEMS_PER_PAGE >= players.length)
+    );
+
+    await interaction.editReply({ 
+      content: `Select a player to ban (Page ${page + 1}):`, 
+      components: [rowMenu, rowButtons] 
+    });
   },
+
+  async handleSelection(interaction, username) {
+    // Basic ban logic; you can add a reason prompt later if needed
+    const result = await rcon.execute(`ban ${username}`);
+
+    if (!result.success) {
+      await interaction.update({ content: `\u26A0 Failed to ban **${username}**: ${result.error}`, components: [] });
+      return;
+    }
+
+    await interaction.update({ content: `\uD83D\uDD28 **${username}** has been banned.`, components: [] });
+  }
 };
