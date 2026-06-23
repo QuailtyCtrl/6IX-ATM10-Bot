@@ -7,7 +7,7 @@ const playerCache = require('./playerCache');
 const rcon = require('./rcon');
 const { formatDuration } = require('./playtime');
 const chatBridge = require('./chatBridge');
-const { joinMessage, leaveMessage, deathMessage, advancementMessage, statusAlert } = require('./embedBuilder');
+const { deathMessage, advancementMessage, statusAlert } = require('./embedBuilder');
 
 let discordClient = null;
 let serverStartedAt = null;
@@ -168,8 +168,6 @@ async function pollOnce() {
   try {
     const lines = await sftp.readNewLines();
     if (lines.length === 0) return;
-
-    console.log('[DEBUG] Raw lines from log:', lines);
 
     const events = logParser.parseLines(lines);
     for (const event of events) await handleEvent(event);

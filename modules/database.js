@@ -203,12 +203,17 @@ function saveLinkCode(code, discordId) {
 }
 
 function consumeLinkCode(code) {
-  // Returns the discord_id if the code exists and is less than 10 minutes old, then deletes it
+  // Returns the discord_id if the code exists and is less than 10 minutes old, then deletes it.
+  // Also cleans up any other expired codes at the same time.
   return new Promise((resolve, reject) => {
     const expiry = Date.now() - 10 * 60 * 1000;
+
+    // Clean up all expired codes
+    db.run('DELETE FROM link_codes WHERE created_at <= ?', [expiry], () => {});
+
     db.get(
-      'SELECT discord_id FROM link_codes WHERE code = ? AND created_at > ?',
-      [code, expiry],
+      'SELECT discord_id FROM link_codes WHERE code = ?',
+      [code],
       (err, row) => {
         if (err) return reject(err);
         if (!row) return resolve(null);

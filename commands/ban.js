@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 const db = require('../modules/database');
+const commandLogger = require('../modules/commandLogger');
 
 const ITEMS_PER_PAGE = 25;
 
@@ -51,14 +52,14 @@ module.exports = {
   },
 
   async handleSelection(interaction, username) {
-    // Basic ban logic; you can add a reason prompt later if needed
     const result = await rcon.execute(`ban ${username}`);
 
     if (!result.success) {
-      await interaction.update({ content: `\u26A0 Failed to ban **${username}**: ${result.error}`, components: [] });
+      await interaction.update({ content: `⚠ Failed to ban **${username}**: ${result.error}`, components: [] });
       return;
     }
 
-    await interaction.update({ content: `\uD83D\uDD28 **${username}** has been banned.`, components: [] });
+    await commandLogger.logCommand(interaction.client, interaction.user.username, `ban ${username}`);
+    await interaction.update({ content: `🔨 **${username}** has been banned.`, components: [] });
   }
 };

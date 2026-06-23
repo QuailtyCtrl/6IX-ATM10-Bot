@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
 const db = require('../modules/database');
+const commandLogger = require('../modules/commandLogger');
 
 const ITEMS_PER_PAGE = 25;
 
@@ -54,10 +55,11 @@ module.exports = {
     const result = await rcon.execute(`kick ${username}`);
 
     if (!result.success) {
-      await interaction.update({ content: `\u26A0 Failed to kick **${username}**: ${result.error}`, components: [] });
+      await interaction.update({ content: `⚠ Failed to kick **${username}**: ${result.error}`, components: [] });
       return;
     }
 
-    await interaction.update({ content: `\uD83D\uDC5F **${username}** has been kicked.`, components: [] });
+    await commandLogger.logCommand(interaction.client, interaction.user.username, `kick ${username}`);
+    await interaction.update({ content: `👢 **${username}** has been kicked.`, components: [] });
   }
 };
