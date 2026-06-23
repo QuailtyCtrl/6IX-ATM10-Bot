@@ -1,37 +1,26 @@
 // commands/restart.js
-// NOTE: Vanilla RCON has no native "restart" command -- this assumes your
-// host's process manager (e.g. Pterodactyl, a systemd unit, etc.) is
-// configured to auto-restart the server process after a clean stop.
-// If that's not the case, swap the rcon.execute('stop') call below for
-// whatever your panel's restart trigger is.
-
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
+const commandLogger = require('../modules/commandLogger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('restart')
     .setDescription('Restarts the server. (Admin only)'),
 
-  async execute(interaction) {
+  async execute(interaction, client) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    await interaction.editReply('\u2699\uFE0F Restarting Server\u2026.');
-    
-    const msgResult = await rcon.execute('say Server is restarting...');
-    const stopResult = await rcon.execute('stop');
+    await commandLogger.logCommand(client, interaction.user.username, 'restart');
 
-    if (!stopResult.success) {
-      await interaction.followUp({
-        content: `\u26A0 Failed to execute restart: ${stopResult.error}`,
-        ephemeral: true,
-      });
+    await rcon.execute('say Server is restarting...');
+    const result = await rcon.execute('stop');
+
+    if (!result.success) {
+      await interaction.editReply(`⚠ Failed to restart: ${result.error}`);
       return;
     }
 
-    await interaction.followUp({
-      content: '✅ Server restart sequence initiated.',
-      ephemeral: true,
-    });
+    await interaction.editReply('⚙️ Server restart sequence initiated.');
   },
 };

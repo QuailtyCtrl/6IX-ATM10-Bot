@@ -1,31 +1,26 @@
 // commands/stop.js
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const rcon = require('../modules/rcon');
+const commandLogger = require('../modules/commandLogger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('stop')
     .setDescription('Stops the server. (Admin only)'),
 
-  async execute(interaction) {
+  async execute(interaction, client) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    await interaction.editReply('\uD83D\uDED1 Shutting Down Server\u2026.');
-    
-    const msgResult = await rcon.execute('say Server is shutting down...');
-    const stopResult = await rcon.execute('stop');
+    await commandLogger.logCommand(client, interaction.user.username, 'stop');
 
-    if (!stopResult.success) {
-      await interaction.followUp({
-        content: `\u26A0 Failed to execute stop: ${stopResult.error}`,
-        ephemeral: true,
-      });
+    await rcon.execute('say Server is shutting down...');
+    const result = await rcon.execute('stop');
+
+    if (!result.success) {
+      await interaction.editReply(`⚠ Failed to stop: ${result.error}`);
       return;
     }
 
-    await interaction.followUp({
-      content: '✅ Server shutdown sequence initiated.',
-      ephemeral: true,
-    });
+    await interaction.editReply('🛑 Server shutdown sequence initiated.');
   },
 };

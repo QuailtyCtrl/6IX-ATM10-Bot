@@ -110,7 +110,16 @@ async function handleEvent(event) {
       const discordId = await db.consumeLinkCode(event.code);
 
       if (!discordId) {
-        await rcon.execute(`tellraw ${event.username} {"text":"[Bot] Invalid or expired code. Run /link in Discord for a new one.","color":"red"}`);
+        // Check if the code exists but is expired
+        const expired = await new Promise(resolve => {
+          db.db.get('SELECT discord_id FROM link_codes WHERE code = ?', [event.code], (err, row) => {
+            resolve(row ? 'expired' : 'invalid');
+          });
+        });
+        const msg = expired === 'expired'
+          ? '[Bot] Code has expired. Run /link in Discord for a new one.'
+          : '[Bot] Invalid code. Double-check and try again.';
+        await rcon.execute(`tellraw ${event.username} {"text":"${msg}","color":"red"}`);
         break;
       }
 
@@ -143,12 +152,12 @@ async function handleEvent(event) {
     }
 
     case 'started':
-      await announce(statusAlert('online'), 'admin');
+      await announce(statusAlert('online'), 'bot');
       serverStartedAt = Date.now();
       break;
 
     case 'stopping':
-      await announce(statusAlert('stop'), 'admin');
+      await announce(statusAlert('stop'), 'bot');
       playerCache.clear();
       serverStartedAt = null;
       break;
