@@ -94,6 +94,12 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
+    // Admin check for privileged component actions
+    const ADMIN_COMMANDS = ['console', 'ban', 'kick', 'restart', 'stop'];
+    if (ADMIN_COMMANDS.includes(actionType)) {
+      if (!(await permissions.requireAdmin(interaction))) return;
+    }
+
     try {
       if (interaction.isButton() && command.showPlayerPagination) {
         await command.showPlayerPagination(interaction, parseInt(parts[1]), actionType);
